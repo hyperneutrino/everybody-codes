@@ -1,0 +1,1 @@
+print(sum(set(map(int, input().split(",")))))
