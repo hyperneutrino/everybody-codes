@@ -1,0 +1,1 @@
+print((lambda n,i:(lambda f,x,y:f(f,x,y))(lambda f,x,y:f(f,[x[y[0]],*x[1:y[0]],x[0],*x[y[0]+1:]]if y[0]else x,y[1:])if y else x[0],n,[(1-2*(k[0]<"R"))*int(k[1:])%len(n)for k in i]))(*[line.split(",")for line in open(0).read().split("\n\n")]))

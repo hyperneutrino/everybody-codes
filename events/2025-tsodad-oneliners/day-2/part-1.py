@@ -1,0 +1,1 @@
+print((lambda A,d:(lambda f:f(f,A[0]+A[1]*1j))(lambda f,x,r=0,c=3:f(f,x,d(r*r)+x,c-1)if c else f"[{int(r.real)},{int(r.imag)}]"))([*map(int,input()[3:-1].split(","))],lambda x:int(x.real/10)+int(x.imag/10)*1j))

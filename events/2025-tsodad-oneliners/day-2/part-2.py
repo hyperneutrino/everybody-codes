@@ -1,0 +1,1 @@
+print((lambda A,f:sum(f(i+j*1j)for i in range(A[0],A[0]+1010,10)for j in range(A[1],A[1]+1010,10)))([*map(int,input()[3:-1].split(","))],(lambda d:lambda x:(lambda f:f(f,x))(lambda f,x,r=0,c=101:c<1or-1e6<=r.real<=1e6>=r.imag>=-1e6and f(f,x,d(r*r)+x,c-1)))(lambda x:int(x.real/1e5)+int(x.imag/1e5)*1j)))

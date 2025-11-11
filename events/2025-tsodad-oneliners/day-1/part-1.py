@@ -1,0 +1,1 @@
+print((lambda n,i:(lambda f,x:f(f,x))(lambda f,x,a=0:f(f,x[1:],min(len(n)-1,max(0,a+x[0])))if x else n[a],sum([[1-2*(k[0]<"R")]*int(k[1:])for k in i],[])))(*[line.split(",")for line in open(0).read().split("\n\n")]))
