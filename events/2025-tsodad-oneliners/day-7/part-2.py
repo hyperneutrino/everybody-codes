@@ -1,0 +1,1 @@
+print((lambda a,b:(lambda a,b:sum(i for i,x in enumerate(a,1)if all(r in b.get(q,[])for q,r in zip(x,x[1:]))))(a.split(","),{x:y.split(",")for x,y in[l.split(" > ") for l in b.split("\n")]}))(*open(0).read().split("\n\n")))
