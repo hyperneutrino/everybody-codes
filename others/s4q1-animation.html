@@ -1,0 +1,532 @@
+<!doctype html>
+
+<html>
+    <head>
+        <title>EC S4Q4 Animation</title>
+        <script defer>
+            let verbose;
+            let range = 0;
+            const list = [];
+            const sequence = [];
+            let sequenceIndex = 0;
+            let listIndex = 0;
+
+            let FRAME_LENGTH;
+            let holdFrames;
+
+            function intersect(arc1, arc2) {
+                const [a, b] = arc1;
+                const [p, q] = arc2;
+
+                const m = (a + b) / 2;
+                const r = (b - a) / 2;
+
+                const n = (p + q) / 2;
+                const s = (q - p) / 2;
+
+                const x = (r ** 2 - s ** 2 + n ** 2 - m ** 2) / (2 * n - 2 * m);
+                const y = Math.sqrt(r ** 2 - (x - m) ** 2);
+
+                return [x, y];
+            }
+
+            function render() {
+                FRAME_LENGTH ??= Math.min(
+                    250,
+                    Math.max(
+                        20,
+                        3000 / sequence.filter((x) => x.type !== "skip").length,
+                    ),
+                );
+
+                holdFrames ??= FRAME_LENGTH - 1;
+
+                const canvas = document.querySelector("canvas");
+
+                const w = (canvas.width = document.body.clientWidth);
+                const h = (canvas.height = document.body.clientHeight);
+
+                const context = canvas.getContext("2d");
+                context.clearRect(0, 0, w, h);
+                context.textBaseline = "middle";
+                context.textAlign = "center";
+
+                const slots = Math.min(range, Math.floor((w - 100) / 40));
+                const space = (w - 100) / slots;
+                const gap = Math.ceil(range / slots);
+                const upper = gap * slots;
+                const norm = (x) => (x / upper) * (w - 100);
+                const map = (x) => norm(x) + 50;
+
+                // Draw the number line
+
+                context.beginPath();
+                context.strokeStyle = "#000000";
+                context.moveTo(50, h / 2);
+                context.lineTo(w - 50, h / 2);
+                context.moveTo(50, h / 2 - 20);
+                context.lineTo(50, h / 2 + 20);
+                context.moveTo(w - 50, h / 2 - 20);
+                context.lineTo(w - 50, h / 2 + 20);
+                context.stroke();
+                context.closePath();
+
+                context.beginPath();
+                context.strokeStyle = "#909090";
+                for (let x = 1; x < slots; x++) {
+                    context.moveTo(50 + x * space, h / 2 - 10);
+                    context.lineTo(50 + x * space, h / 2 + 10);
+                }
+                context.stroke();
+                context.closePath();
+
+                context.lineWidth = 2;
+                context.strokeStyle = "#000000";
+
+                for (const { type, position, step, side } of sequence
+                    .slice(0, sequenceIndex)
+                    .filter((item) => item.type.endsWith("-success"))) {
+                    context.beginPath();
+                    context.arc(
+                        map(
+                            type === "forward-success"
+                                ? position + step / 2
+                                : position - step / 2,
+                        ),
+                        h / 2,
+                        norm(step / 2),
+                        0,
+                        Math.PI,
+                        side === 1,
+                    );
+                    context.stroke();
+                    context.closePath();
+                }
+
+                const item = sequence[sequenceIndex];
+                const { type, position, step, side, blockers, point } =
+                    item ?? {};
+
+                context.beginPath();
+                let text;
+                if (type === "negative") {
+                    text = `backward jump (${position} -> ${position - step}) would be non-positive`;
+                    context.strokeStyle = "#ff3333";
+                    context.arc(
+                        map(position - step / 2),
+                        h / 2,
+                        norm(step / 2),
+                        0,
+                        Math.PI,
+                        side === 1,
+                    );
+                } else if (
+                    type === "backward-repeat" ||
+                    type === "forward-repeat"
+                ) {
+                    const fwd = type.startsWith("forward-");
+                    const signed = fwd ? step : -step;
+                    text = `backward jump (${position} -> ${position + signed}) is occupied`;
+                    context.strokeStyle = "#ff3333";
+                    context.arc(
+                        map(position + signed / 2),
+                        h / 2,
+                        norm(step / 2),
+                        0,
+                        Math.PI,
+                        side === 1,
+                    );
+                    context.stroke();
+                    context.closePath();
+                    context.beginPath();
+                    context.fillStyle = "#ff3333";
+                    context.arc(
+                        map(position + signed),
+                        h / 2,
+                        10,
+                        0,
+                        Math.PI * 2,
+                    );
+                    context.fill();
+                } else if (
+                    type === "backward-blocked" ||
+                    type === "forward-blocked" ||
+                    type === "forward-impossible"
+                ) {
+                    const fwd = type.startsWith("forward-");
+                    const signed = fwd ? step : -step;
+                    text =
+                        type === "forward-impossible"
+                            ? `forward jump (${position} -> ${position + signed}) is impossible due to ${blockers.length} arc${blockers.length === 1 ? "" : "s"}`
+                            : `${fwd ? "forward" : "backward"} jump (${position} -> ${position + signed}${point ? ` up to ${point}` : ""}) is blocked by ${blockers.length} arc${blockers.length === 1 ? "" : "s"}`;
+                    context.strokeStyle = "#ff3333";
+                    context.arc(
+                        map(position + signed / 2),
+                        h / 2,
+                        norm(step / 2),
+                        0,
+                        Math.PI,
+                        side === 1,
+                    );
+                    for (const arc of blockers) {
+                        context.stroke();
+                        context.closePath();
+                        context.beginPath();
+                        let [x, y] = intersect(arc, [
+                            position,
+                            position + signed,
+                        ]);
+                        if (side === 1) y *= -1;
+                        context.moveTo(map(x) - 3, h / 2 + norm(y) - 10);
+                        context.lineTo(map(x) + 3, h / 2 + norm(y) + 10);
+                        context.moveTo(map(x) - 10, h / 2 + norm(y) + 3);
+                        context.lineTo(map(x) + 10, h / 2 + norm(y) - 3);
+                    }
+                    if (point) {
+                        context.stroke();
+                        context.closePath();
+                        context.beginPath();
+                        context.fillStyle = "#ff3333";
+                        context.fillRect(
+                            map(position + signed),
+                            h / 2 - 5,
+                            norm(point - position - signed + 0.75),
+                            10,
+                        );
+                    }
+                } else if (type === "forward-success") {
+                    text = `forward jump (${position} -> ${position + step}) is valid`;
+                    context.strokeStyle = "#000000";
+                    context.arc(
+                        map(position + step / 2),
+                        h / 2,
+                        norm(step / 2),
+                        Math.PI,
+                        (side === 1 ? -1 : 1) *
+                            (holdFrames / FRAME_LENGTH) *
+                            Math.PI,
+                        side === 0,
+                    );
+                } else if (type === "backward-success") {
+                    text = `backward jump (${position} -> ${position - step}) is valid`;
+                    context.strokeStyle = "#000000";
+                    context.arc(
+                        map(position - step / 2),
+                        h / 2,
+                        norm(step / 2),
+                        0,
+                        (side === 1 ? -1 : 1) *
+                            (1 - holdFrames / FRAME_LENGTH) *
+                            Math.PI,
+                        side === 1,
+                    );
+                } else {
+                    text = JSON.stringify(item);
+                }
+                context.stroke();
+                context.closePath();
+
+                if (text && verbose) {
+                    context.strokeStyle = "#000000";
+                    context.fillStyle = "#000000";
+                    context.font = "normal 24px monospace";
+                    context.fillText(text, w / 2, h / 3);
+                }
+
+                // Proceed
+
+                if (holdFrames-- <= 0) {
+                    if (item?.type.match(/-(success|impossible)$/)) listIndex++;
+                    sequenceIndex++;
+                    while (
+                        sequenceIndex < sequence.length &&
+                        sequence[sequenceIndex].type === "skip"
+                    ) {
+                        listIndex++;
+                        sequenceIndex++;
+                    }
+                    holdFrames = FRAME_LENGTH - 1;
+                }
+
+                // Draw the tick labels
+
+                context.fillStyle = "#303030";
+                context.font = "normal 15px monospace";
+
+                for (let x = 0; x <= slots; x++) {
+                    if (gap * x >= 1000) {
+                        context.save();
+                        context.translate(50 + x * space, h / 2);
+                        context.rotate(Math.PI / 2);
+                        context.translate(-50 - x * space, -h / 2);
+                    }
+                    context.fillText(`${gap * x}`, 50 + x * space, h / 2);
+                    if (gap * x >= 1000) context.restore();
+                }
+
+                // Draw the input
+
+                context.fillStyle = "#303030";
+                context.font = "normal 15px monospace";
+
+                const offset = Math.min(
+                    Math.max(0, listIndex - 15),
+                    list.length - 30,
+                );
+
+                context.fillText(
+                    list
+                        .slice(offset, offset + 30)
+                        .map((item, index) =>
+                            index === listIndex - offset
+                                ? `[${item}]`
+                                : ` ${item} `,
+                        )
+                        .join(""),
+                    w / 2,
+                    h - 50,
+                );
+
+                if (!item) return "end";
+            }
+
+            function frame() {
+                try {
+                    const value = render();
+                    if (value === "end") return;
+                } catch (err) {
+                    console.error(err);
+                }
+
+                requestAnimationFrame(frame);
+            }
+
+            function isInOrder(...list) {
+                return list.every(
+                    (item, index) =>
+                        index === list.length - 1 || item < list[index + 1],
+                );
+            }
+
+            function initiate(value) {
+                verbose = !value.includes("Simple");
+                const part = parseInt(value.match(/\d/));
+
+                const input = document.querySelector("input#list");
+                const span = document.querySelector("span#error-message");
+
+                if (
+                    !/^\s*[1-9][0-9]*(\s*,\s*[1-9][0-9]*)*\s*$/.test(
+                        input.value,
+                    )
+                )
+                    return (span.innerHTML =
+                        "Input must be a comma-separated list of positive integers.");
+
+                list.push(
+                    ...input.value
+                        .trim()
+                        .split(/\s*,\s*/)
+                        .filter(Boolean)
+                        .map((x) => parseInt(x)),
+                );
+
+                let position = 0;
+                const seen = new Set();
+                const arcs = [[], []];
+                let side = 0;
+
+                const pushIfVerbose = (x) => verbose && sequence.push(x);
+
+                for (let step of list) {
+                    let blockers;
+                    const details = { position, step, side };
+
+                    if (position - step <= 0)
+                        pushIfVerbose({ type: "negative", ...details });
+                    else if (seen.has(position - step))
+                        pushIfVerbose({ type: "backward-repeat", ...details });
+                    else if (
+                        part === 3 &&
+                        (blockers = arcs[side].filter(
+                            ([x, y]) =>
+                                isInOrder(x, position - step, y, position) ||
+                                isInOrder(position - step, x, position, y),
+                        )).length > 0
+                    )
+                        pushIfVerbose({
+                            type: "backward-blocked",
+                            ...details,
+                            blockers,
+                        });
+                    else {
+                        sequence.push({
+                            type: "backward-success",
+                            ...details,
+                        });
+
+                        arcs[side].push([position - step, position]);
+                        position -= step;
+                        seen.add(position);
+                        side = 1 - side;
+
+                        continue;
+                    }
+
+                    while (true) {
+                        const details = { position, step, side };
+                        if (
+                            part === 3 &&
+                            (blockers = arcs[side].filter(([x, y]) =>
+                                isInOrder(x, position, y, position + step),
+                            )).length > 0
+                        ) {
+                            sequence.push(
+                                verbose
+                                    ? {
+                                          type: "forward-impossible",
+                                          ...details,
+                                          blockers,
+                                      }
+                                    : { type: "skip" },
+                            );
+
+                            break;
+                        }
+
+                        if (
+                            part === 3 &&
+                            (blockers = arcs[side].filter(([x, y]) =>
+                                isInOrder(position, x, position + step, y),
+                            )).length > 0
+                        ) {
+                            const point = Math.max(
+                                ...blockers.map(([, y]) => y),
+                            );
+
+                            pushIfVerbose({
+                                type: "forward-blocked",
+                                ...details,
+                                point,
+                                blockers,
+                            });
+
+                            step = point + 1 - position;
+
+                            continue;
+                        }
+
+                        if (part >= 2 && seen.has(position + step)) {
+                            pushIfVerbose({
+                                type: "forward-repeat",
+                                ...details,
+                            });
+
+                            step++;
+                            continue;
+                        }
+
+                        sequence.push({ type: "forward-success", ...details });
+
+                        arcs[side].push([position, position + step]);
+                        position += step;
+                        range = Math.max(range, position);
+                        seen.add(position);
+                        side = 1 - side;
+
+                        break;
+                    }
+                }
+
+                document.querySelector("canvas").style.display = "";
+                document.querySelector("div#container").style.display = "none";
+
+                requestAnimationFrame(frame);
+            }
+
+            document.addEventListener("DOMContentLoaded", () => {
+                const element = document.querySelector("input#list");
+                element.focus();
+                element.selectionStart = 0;
+                element.selectionEnd = element.value.length;
+            });
+        </script>
+    </head>
+    <body
+        style="
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100vw;
+            height: 100vh;
+        "
+    >
+        <canvas style="width: 100vw; height: 100vh; display: none"></canvas>
+        <div
+            id="container"
+            style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.5rem;
+            "
+        >
+            <form
+                style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.5rem;
+                "
+                action="javascript:void(0)"
+                accept-charset="utf-8"
+                onsubmit="initiate(event.submitter.value)"
+            >
+                <input
+                    id="list"
+                    type="text"
+                    placeholder="Enter a comma-separated list of numbers."
+                    style="font-family: monospace; width: 90vw"
+                />
+                <div style="display: flex; align-items: center; gap: 0.5rem">
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (Part 3)"
+                    />
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (P3 Simple)"
+                    />
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem">
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (Part 2)"
+                    />
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (P2 Simple)"
+                    />
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem">
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (Part 1)"
+                    />
+                    <input
+                        type="submit"
+                        style="font-family: monospace"
+                        value="GO (P1 Simple)"
+                    />
+                </div>
+            </form>
+            <span id="error-message" style="color: red"></span>
+        </div>
+    </body>
+</html>
