@@ -4,7 +4,114 @@
     <head>
         <title>EC S4Q4 Animation</title>
         <script defer>
-            let verbose;
+            let verbose, part;
+
+            let position = 0;
+            const seen = new Set();
+            const arcs = [[], []];
+            let side = 0;
+
+            function append(step) {
+                list.push(step);
+                const pushIfVerbose = (x) => verbose && sequence.push(x);
+
+                let blockers;
+                const details = { position, step, side };
+
+                if (position - step <= 0)
+                    pushIfVerbose({ type: "negative", ...details });
+                else if (seen.has(position - step))
+                    pushIfVerbose({ type: "backward-repeat", ...details });
+                else if (
+                    part === 3 &&
+                    (blockers = arcs[side].filter(
+                        ([x, y]) =>
+                            isInOrder(x, position - step, y, position) ||
+                            isInOrder(position - step, x, position, y),
+                    )).length > 0
+                )
+                    pushIfVerbose({
+                        type: "backward-blocked",
+                        ...details,
+                        blockers,
+                    });
+                else {
+                    sequence.push({
+                        type: "backward-success",
+                        ...details,
+                    });
+
+                    arcs[side].push([position - step, position]);
+                    position -= step;
+                    seen.add(position);
+                    side = 1 - side;
+
+                    return;
+                }
+
+                while (true) {
+                    const details = { position, step, side };
+                    if (
+                        part === 3 &&
+                        (blockers = arcs[side].filter(([x, y]) =>
+                            isInOrder(x, position, y, position + step),
+                        )).length > 0
+                    ) {
+                        sequence.push(
+                            verbose
+                                ? {
+                                      type: "forward-impossible",
+                                      ...details,
+                                      blockers,
+                                  }
+                                : { type: "skip" },
+                        );
+
+                        break;
+                    }
+
+                    if (
+                        part === 3 &&
+                        (blockers = arcs[side].filter(([x, y]) =>
+                            isInOrder(position, x, position + step, y),
+                        )).length > 0
+                    ) {
+                        const point = Math.max(...blockers.map(([, y]) => y));
+
+                        pushIfVerbose({
+                            type: "forward-blocked",
+                            ...details,
+                            point,
+                            blockers,
+                        });
+
+                        step = point + 1 - position;
+
+                        continue;
+                    }
+
+                    if (part >= 2 && seen.has(position + step)) {
+                        pushIfVerbose({
+                            type: "forward-repeat",
+                            ...details,
+                        });
+
+                        step++;
+                        continue;
+                    }
+
+                    sequence.push({ type: "forward-success", ...details });
+
+                    arcs[side].push([position, position + step]);
+                    position += step;
+                    range = Math.max(range, position);
+                    seen.add(position);
+                    side = 1 - side;
+
+                    break;
+                }
+            }
+
             let range = 0;
             const list = [];
             const sequence = [];
@@ -235,7 +342,7 @@
 
                 // Proceed
 
-                if (holdFrames-- <= 0) {
+                if (item && holdFrames-- <= 0) {
                     if (item?.type.match(/-(success|impossible)$/)) listIndex++;
                     sequenceIndex++;
                     while (
@@ -282,18 +389,15 @@
                                 ? `[${item}]`
                                 : ` ${item} `,
                         )
-                        .join(""),
+                        .join("") + (item ? "" : " [press A to add more]"),
                     w / 2,
                     h - 50,
                 );
-
-                if (!item) return "end";
             }
 
             function frame() {
                 try {
-                    const value = render();
-                    if (value === "end") return;
+                    render();
                 } catch (err) {
                     console.error(err);
                 }
@@ -310,7 +414,7 @@
 
             function initiate(value) {
                 verbose = !value.includes("Simple");
-                const part = parseInt(value.match(/\d/));
+                part = parseInt(value.match(/\d/));
 
                 const input = document.querySelector("input#list");
                 const span = document.querySelector("span#error-message");
@@ -323,119 +427,12 @@
                     return (span.innerHTML =
                         "Input must be a comma-separated list of positive integers.");
 
-                list.push(
-                    ...input.value
-                        .trim()
-                        .split(/\s*,\s*/)
-                        .filter(Boolean)
-                        .map((x) => parseInt(x)),
-                );
-
-                let position = 0;
-                const seen = new Set();
-                const arcs = [[], []];
-                let side = 0;
-
-                const pushIfVerbose = (x) => verbose && sequence.push(x);
-
-                for (let step of list) {
-                    let blockers;
-                    const details = { position, step, side };
-
-                    if (position - step <= 0)
-                        pushIfVerbose({ type: "negative", ...details });
-                    else if (seen.has(position - step))
-                        pushIfVerbose({ type: "backward-repeat", ...details });
-                    else if (
-                        part === 3 &&
-                        (blockers = arcs[side].filter(
-                            ([x, y]) =>
-                                isInOrder(x, position - step, y, position) ||
-                                isInOrder(position - step, x, position, y),
-                        )).length > 0
-                    )
-                        pushIfVerbose({
-                            type: "backward-blocked",
-                            ...details,
-                            blockers,
-                        });
-                    else {
-                        sequence.push({
-                            type: "backward-success",
-                            ...details,
-                        });
-
-                        arcs[side].push([position - step, position]);
-                        position -= step;
-                        seen.add(position);
-                        side = 1 - side;
-
-                        continue;
-                    }
-
-                    while (true) {
-                        const details = { position, step, side };
-                        if (
-                            part === 3 &&
-                            (blockers = arcs[side].filter(([x, y]) =>
-                                isInOrder(x, position, y, position + step),
-                            )).length > 0
-                        ) {
-                            sequence.push(
-                                verbose
-                                    ? {
-                                          type: "forward-impossible",
-                                          ...details,
-                                          blockers,
-                                      }
-                                    : { type: "skip" },
-                            );
-
-                            break;
-                        }
-
-                        if (
-                            part === 3 &&
-                            (blockers = arcs[side].filter(([x, y]) =>
-                                isInOrder(position, x, position + step, y),
-                            )).length > 0
-                        ) {
-                            const point = Math.max(
-                                ...blockers.map(([, y]) => y),
-                            );
-
-                            pushIfVerbose({
-                                type: "forward-blocked",
-                                ...details,
-                                point,
-                                blockers,
-                            });
-
-                            step = point + 1 - position;
-
-                            continue;
-                        }
-
-                        if (part >= 2 && seen.has(position + step)) {
-                            pushIfVerbose({
-                                type: "forward-repeat",
-                                ...details,
-                            });
-
-                            step++;
-                            continue;
-                        }
-
-                        sequence.push({ type: "forward-success", ...details });
-
-                        arcs[side].push([position, position + step]);
-                        position += step;
-                        range = Math.max(range, position);
-                        seen.add(position);
-                        side = 1 - side;
-
-                        break;
-                    }
+                for (let step of input.value
+                    .trim()
+                    .split(/\s*,\s*/)
+                    .filter(Boolean)
+                    .map((x) => parseInt(x))) {
+                    append(step);
                 }
 
                 document.querySelector("canvas").style.display = "";
@@ -449,6 +446,38 @@
                 element.focus();
                 element.selectionStart = 0;
                 element.selectionEnd = element.value.length;
+            });
+
+            document.addEventListener("keydown", (e) => {
+                if (sequenceIndex >= sequence.length && e.keyCode === 65) {
+                    let raw = prompt(
+                        "Enter a comma-separated list of numbers.",
+                    );
+
+                    while (true) {
+                        if (!raw) return;
+
+                        if (
+                            !/^\s*[1-9][0-9]*(\s*,\s*[1-9][0-9]*)*\s*$/.test(
+                                raw,
+                            )
+                        ) {
+                            raw = prompt(
+                                "Invalid input. Enter a comma-separated list of positive integers.",
+                            );
+                        }
+
+                        break;
+                    }
+
+                    for (let step of raw
+                        .trim()
+                        .split(/\s*,\s*/)
+                        .filter(Boolean)
+                        .map((x) => parseInt(x))) {
+                        append(step);
+                    }
+                }
             });
         </script>
     </head>
