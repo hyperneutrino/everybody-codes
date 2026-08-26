@@ -269,9 +269,9 @@
                 context.fillStyle = "#303030";
                 context.font = "normal 15px monospace";
 
-                const offset = Math.min(
-                    Math.max(0, listIndex - 15),
-                    list.length - 30,
+                const offset = Math.max(
+                    0,
+                    Math.min(listIndex - 15, list.length - 30),
                 );
 
                 context.fillText(
