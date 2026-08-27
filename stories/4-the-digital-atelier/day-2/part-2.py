@@ -1,0 +1,24 @@
+get = lambda: tuple(map(int, input().split("=")[1][1:-1].split(",")))
+
+start = get()
+beacons = { "A": get(), "B": get(), "C": get() }
+moves = input().split("=")[1]
+
+beetles = { start }
+position = start
+
+for move in moves:
+    px, py = position
+    bx, by = beacons[move]
+    position = (int((px + bx) / 2), int((py + by) / 2))
+    beetles.add(position)
+
+def neighbors(px, py):
+    return { (px - 1, py), (px + 1, py), (px, py - 1), (px, py + 1) }
+
+fireflies = set()
+
+for px, py in beetles:
+    fireflies |= neighbors(px, py)
+
+print(len(fireflies - beetles))
