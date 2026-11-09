@@ -1,11 +1,9 @@
 import math
 
+nums = list(map(int, input().split(",")))
 total = 0
 
-for pinecones in map(int, input().split(",")):
-    side_length = math.ceil(math.sqrt(pinecones))
-    area = side_length ** 2
-    required = area - pinecones
-    total += required
+for num in nums:
+    total += math.ceil(math.sqrt(num)) ** 2 - num
 
 print(total)
